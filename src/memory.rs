@@ -313,10 +313,15 @@ pub struct MemoryTickStats {
     pub pruned: usize,
 }
 
-/// The shared memory layer — a wrapper around MemoryStore for the AgentSpace.
+/// A standalone shared-memory helper — a thin wrapper around [`MemoryStore`].
 ///
-/// This is the equivalent of the Python MemoryLayer class, providing
-/// a shared memory pool that all agents in a space can access.
+/// **Status (honest):** This type is exported so callers can build a
+/// process-wide memory pool, but `AgentSpace` does **not** currently wire
+/// one up. Each [`Agent`](crate::Agent) owns a private `MemoryStore`. Code
+/// that wants a shared layer must construct a `MemoryLayer` and route
+/// remember/recall through it explicitly. The Python counterpart's
+/// `MemoryLayer` is plumbed through the space; that wiring is not yet
+/// ported.
 pub struct MemoryLayer {
     store: MemoryStore,
 }
