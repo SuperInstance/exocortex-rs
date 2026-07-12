@@ -345,4 +345,65 @@ mod tests {
         bus.publish(CortexEvent::new("ok", "u"));
         assert_eq!(bus.dispatch_all(), 1);
     }
+
+    #[test]
+    fn test_should_render_rate_limits_per_trace() {
+        // should_render caps rendering at max_per_trace (default 5) events per
+        // trace_id. Different trace_ids are tracked independently.
+        let mut bus = CorticalBus::new();
+        let trace_a = "trace-a-aaaa".to_string();
+        let trace_b = "trace-b-bbbb".to_string();
+
+        // First 5 of trace A should render; the 6th must be suppressed.
+        for _ in 0..5 {
+            let mut e = CortexEvent::new("predict", "u");
+            e.trace_id = trace_a.clone();
+            assert!(bus.should_render(&e), "expected render within cap");
+        }
+        let mut sixth = CortexEvent::new("predict", "u");
+        sixth.trace_id = trace_a.clone();
+        assert!(!bus.should_render(&sixth), "expected cap to be enforced");
+
+        // Trace B has its own budget.
+        let mut e_b = CortexEvent::new("predict", "u");
+        e_b.trace_id = trace_b;
+        assert!(bus.should_render(&e_b));
+    }
+
+    #[test]
+    fn test_dispatch_some_bounds_dispatch_count() {
+        let mut bus = CorticalBus::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_cb = Arc::clone(&counter);
+        bus.subscribe(move |_e: &CortexEvent| {
+            counter_cb.fetch_add(1, Ordering::SeqCst);
+        });
+        for i in 0..10u32 {
+            bus.publish(CortexEvent::new(&format!("e{i}"), "u"));
+        }
+
+        // dispatch_some must stop at the bound even when more are pending.
+        assert_eq!(bus.dispatch_some(3), 3);
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+        assert_eq!(bus.pending(), 7);
+
+        // dispatch_some with a bound larger than pending drains everything.
+        assert_eq!(bus.dispatch_some(usize::MAX), 7);
+        assert_eq!(bus.pending(), 0);
+    }
+
+    #[test]
+    fn test_emit_shorthand_publishes() {
+        let mut bus = CorticalBus::new();
+        assert!(bus.emit("predict", "agent-1"));
+        assert_eq!(bus.pending(), 1);
+        assert_eq!(bus.pop_next().unwrap().event_type, "predict");
+    }
+
+    #[test]
+    fn test_pop_next_on_empty_returns_none() {
+        let mut bus = CorticalBus::new();
+        assert!(bus.pop_next().is_none());
+        assert!(bus.is_empty());
+    }
 }

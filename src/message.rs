@@ -296,4 +296,55 @@ mod tests {
         assert!(Message::recall("test").expects_response());
         assert!(!Message::remember("test").expects_response());
     }
+
+    #[test]
+    fn test_peek_returns_highest_priority_without_removing() {
+        let mut q = MessageQueue::new();
+        assert!(q.peek().is_none());
+
+        q.push(Message::new("low").with_priority(0.1));
+        q.push(Message::new("high").with_priority(0.9));
+        q.push(Message::new("mid").with_priority(0.5));
+
+        // peek() must surface the highest-priority message without draining.
+        assert_eq!(q.peek().unwrap().content, "high");
+        assert_eq!(q.len(), 3);
+
+        // Repeated peeks are stable.
+        assert_eq!(q.peek().unwrap().content, "high");
+        assert_eq!(q.len(), 3);
+    }
+
+    #[test]
+    fn test_clear_empties_queue() {
+        let mut q = MessageQueue::new();
+        q.push(Message::new("a"));
+        q.push(Message::new("b"));
+        assert_eq!(q.len(), 2);
+
+        q.clear();
+        assert!(q.is_empty());
+        assert_eq!(q.len(), 0);
+        assert!(q.pop().is_none());
+    }
+
+    #[test]
+    fn test_with_capacity_zero_drops_everything() {
+        // A zero-capacity queue cannot accept anything — every push must
+        // find a lower-priority message to evict, and when the queue is
+        // empty there is nothing to evict, so push returns false.
+        let mut q = MessageQueue::with_capacity(0);
+        assert!(!q.push(Message::new("first")));
+        assert!(q.is_empty());
+    }
+
+    #[test]
+    fn test_with_capacity_one_evicts_on_push() {
+        let mut q = MessageQueue::with_capacity(1);
+        assert!(q.push(Message::new("low").with_priority(0.1)));
+        // Full — the new message is higher priority, so the old one is evicted.
+        assert!(q.push(Message::new("high").with_priority(0.9)));
+        assert_eq!(q.len(), 1);
+        assert_eq!(q.pop().unwrap().content, "high");
+    }
 }

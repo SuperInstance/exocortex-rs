@@ -428,4 +428,87 @@ mod tests {
         let stats = store.stats();
         assert!(stats.total >= 3);
     }
+
+    #[test]
+    fn test_recall_and_reinforce_reheats_to_hot() {
+        // recall_and_reinforce must (1) return matching memories with their
+        // similarity, (2) bump last_reinforced, and (3) reheat warm/cold
+        // entries back into the hot tier.
+        let mut store = MemoryStore::new();
+        let emb = vec![0.4; 32];
+        let id = store.remember("fact", emb.clone(), "agent", &[]);
+
+        // Force-cool the memory into the warm tier by aging it past the
+        // hot window, then running a tick.
+        if let Some(entry) = store.warm.get_mut(&id) {
+            entry.last_reinforced = current_time() - (HOT_WINDOW_SECONDS + 10.0);
+        }
+        // Also need the hot-tier copy to be aged so tick() moves it out.
+        if let Some(entry) = store.hot.get_mut(&id) {
+            entry.last_reinforced = current_time() - (HOT_WINDOW_SECONDS + 10.0);
+        }
+        let tick_stats = store.tick();
+        assert!(
+            tick_stats.cooled_to_warm >= 1,
+            "expected hot→warm transition, got {tick_stats:?}"
+        );
+        // After cooling, the memory is in warm only.
+        assert!(!store.hot.contains_key(&id));
+        assert!(store.warm.contains_key(&id));
+
+        // recall_and_reinforce should bring it back to hot.
+        let results = store.recall_and_reinforce(&emb, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, id);
+        assert_eq!(results[0].1, "fact");
+        assert!(
+            store.hot.contains_key(&id),
+            "memory should be reheated to hot"
+        );
+    }
+
+    #[test]
+    fn test_tick_prunes_decayed_cold_memories() {
+        // Cold-tier memories whose effective confidence falls below 0.05
+        // must be pruned on tick, and their embedding-cache entries removed.
+        let mut store = MemoryStore::new();
+        let id = store.remember("ephemeral", vec![0.5; 16], "a", &[]);
+
+        // Move the memory straight into the cold tier with confidence low
+        // enough that effective_confidence < 0.05 (the prune threshold).
+        let ancient = current_time() - 86400.0 * 365.0; // ~1 year
+        let mut entry = store.warm.remove(&id).unwrap();
+        entry.last_reinforced = ancient;
+        entry.confidence = 0.01;
+        store.cold.insert(id.clone(), entry);
+        // Clear the hot copy too so the tick has nothing else to do.
+        store.hot.remove(&id);
+        store.hot_order.retain(|x| x != &id);
+
+        let before = store.total();
+        assert!(store.cold.contains_key(&id));
+
+        let prune_stats = store.tick();
+        assert!(
+            prune_stats.pruned >= 1,
+            "expected at least one prune, got {prune_stats:?}"
+        );
+        assert_eq!(store.total(), before - prune_stats.pruned);
+        assert!(store.get(&id).is_none(), "decayed memory should be gone");
+        assert!(
+            !store.embed_cache.contains_key(&id),
+            "embedding cache entry should be removed on prune"
+        );
+    }
+
+    #[test]
+    fn test_get_mut_updates_are_visible_via_get() {
+        let mut store = MemoryStore::new();
+        let id = store.remember("orig", vec![0.1; 8], "a", &[]);
+
+        if let Some(entry) = store.get_mut(&id) {
+            entry.content = "edited".to_string();
+        }
+        assert_eq!(store.get(&id).unwrap().content, "edited");
+    }
 }
