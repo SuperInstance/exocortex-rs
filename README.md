@@ -106,6 +106,14 @@ let tagged = store.query_by_tags(&["important"], 10);
 let stats = store.tick();
 ```
 
+## Cross-Implementation
+
+This component exists in two languages:
+- **Python** (`pip install si-exocortex`) — [SuperInstance/exocortex](https://github.com/SuperInstance/exocortex)
+- **Rust** (`cargo add exocortex`) — [SuperInstance/exocortex-rs](https://github.com/SuperInstance/exocortex-rs)
+
+Both implement the same specification. Choose based on your runtime.
+
 ## Architecture
 
 ```
