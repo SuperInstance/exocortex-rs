@@ -1,0 +1,42 @@
+[package]
+name = "si-exocortex"
+version = "0.1.0"
+edition = "2021"
+authors = ["SuperInstance"]
+license = "MIT"
+description = "Persistent cognitive substrate for multi-agent systems — conservation-law aware decision making, tiered memory, and inter-agent messaging"
+repository = "https://github.com/SuperInstance/exocortex-rs"
+homepage = "https://github.com/SuperInstance/exocortex-rs"
+documentation = "https://github.com/SuperInstance/exocortex-rs"
+readme = "README.md"
+keywords = ["agent", "ai", "cognitive", "multi-agent", "exocortex"]
+categories = ["science", "data-structures", "concurrency"]
+
+[lib]
+name = "exocortex"
+path = "src/lib.rs"
+
+[features]
+default = ["std"]
+std = []
+no_std = []
+
+[dependencies]
+# None — this crate is zero-dependency by design.
+# The exocortex is a substrate, not an application framework.
+# Bring your own async runtime, storage backend, and transport layer.
+
+[dev-dependencies]
+# Tests are pure Rust, no external test framework needed.
+
+[[test]]
+name = "core"
+path = "tests/core.rs"
+
+[[test]]
+name = "agent"
+path = "tests/agent.rs"
+
+[[test]]
+name = "conservation"
+path = "tests/conservation.rs"
