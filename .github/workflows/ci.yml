@@ -11,5 +11,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
+          components: clippy, rustfmt
+      - run: cargo build --verbose
       - run: cargo test --verbose
-      - run: cargo clippy -- -D warnings
+      # --all-targets covers lib, bins, tests, benches — without it clippy
+      # silently skips the integration test crates under tests/.
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo fmt --all -- --check
