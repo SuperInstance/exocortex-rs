@@ -16,15 +16,14 @@ categories = ["science", "data-structures", "concurrency"]
 name = "exocortex"
 path = "src/lib.rs"
 
-[features]
-default = ["std"]
-std = []
-no_std = []
-
 [dependencies]
 # None — this crate is zero-dependency by design.
 # The exocortex is a substrate, not an application framework.
 # Bring your own async runtime, storage backend, and transport layer.
+#
+# Note: the crate currently requires std (it uses std::collections and
+# std::time::SystemTime throughout). A future no_std port would need
+# alloc + an injectable clock; see README "Storage & Runtime" section.
 
 [dev-dependencies]
 # Tests are pure Rust, no external test framework needed.

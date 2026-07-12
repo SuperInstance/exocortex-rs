@@ -400,17 +400,9 @@ pub fn generate_id() -> String {
 
 /// Current unix timestamp as f64.
 pub fn current_time() -> f64 {
-    // For no_std, we'd use a provided clock. For now, use std.
-    #[cfg(feature = "std")]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0)
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        0.0
-    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }

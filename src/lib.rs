@@ -32,7 +32,9 @@
 //! assert!(result.is_ok());
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
+//! *🦀 Part of the **SuperInstance Fleet** — zero-dependency, std-only for now.
+//! A future `no_std` port would require replacing `std::collections::*` and
+//! `SystemTime` with `alloc` + an injectable clock.*
 
 pub mod agent;
 pub mod bus;
