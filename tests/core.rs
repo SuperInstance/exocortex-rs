@@ -164,10 +164,36 @@ fn test_cortical_bus_priority() {
     bus.publish(CortexEvent::new("high", "unit").with_importance(0.9));
     bus.publish(CortexEvent::new("mid", "unit").with_importance(0.5));
 
-    // The bus should dispatch in priority order (high first)
-    // We can verify by checking the internal queue ordering
-    let stats = bus.stats();
-    assert_eq!(stats.pending, 3);
+    assert_eq!(bus.stats().pending, 3);
+
+    // Drain in priority order via the public API and verify that higher
+    // importance is actually popped first — previously this test only
+    // asserted on the pending count and would have passed even if the
+    // priority queue returned events in arbitrary order.
+    let mut order = Vec::new();
+    while let Some(event) = bus.pop_next() {
+        order.push(event.event_type);
+    }
+    assert_eq!(order, vec!["high", "mid", "low"]);
+}
+
+#[test]
+fn test_cortical_bus_subscriber_fanout() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let mut bus = bus::CorticalBus::new();
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_cb = Arc::clone(&counter);
+    bus.subscribe(move |_event: &CortexEvent| {
+        counter_cb.fetch_add(1, Ordering::SeqCst);
+    });
+
+    bus.publish(CortexEvent::new("a", "u"));
+    bus.publish(CortexEvent::new("b", "u"));
+
+    assert_eq!(bus.dispatch_all(), 2);
+    assert_eq!(counter.load(Ordering::SeqCst), 2);
 }
 
 #[test]
