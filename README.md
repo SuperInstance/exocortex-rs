@@ -9,6 +9,10 @@ Part of the [SuperInstance](https://github.com/SuperInstance) fleet ecosystem.
 
 ---
 
+## Philosophy
+
+Built on [Working Animal Architecture](https://github.com/SuperInstance/AI-Writings), where **γ + η = C** (genome + nurture = capability). The exocortex is the **η** — the nurture layer, the persistent memory and learned experience that turns a working animal from instinct into craft. Each agent is a working animal; the exocortex is the shared cognitive substrate that coordinates the flock.
+
 ## Overview
 
 This is the Rust port of [exocortex](https://github.com/SuperInstance/exocortex), rewritten for zero-dependency, deterministic computation. It provides:
