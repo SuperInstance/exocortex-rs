@@ -254,9 +254,13 @@ fn test_space_send_message() {
 
     let receiver = space.get("receiver").unwrap();
     assert_eq!(receiver.pending_messages(), 1);
+    // Agent::receive() already bumps messages_received; space.send must not
+    // double-count it (regression guard).
+    assert_eq!(receiver.state.messages_received, 1);
 
     let sender = space.get("sender").unwrap();
     assert_eq!(sender.state.messages_sent, 1);
+    assert_eq!(sender.state.messages_received, 0);
 }
 
 #[test]

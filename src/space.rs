@@ -106,10 +106,10 @@ impl AgentSpace {
         message.to = to.to_string();
         let msg_type = message.message_type.clone();
 
-        // Deliver
+        // Deliver. `Agent::receive` increments messages_received and pushes
+        // onto the queue — do not double-count here.
         if let Some(ref mut a) = self.agents.get_mut(to_idx) {
             a.receive(message);
-            a.state.messages_received += 1;
         }
 
         // Emit routing event
