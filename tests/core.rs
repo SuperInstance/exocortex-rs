@@ -11,8 +11,11 @@ fn test_operation_enum() {
 
 #[test]
 fn test_operation_from_str() {
-    assert_eq!(Operation::from_str("embed"), Some(Operation::Embed));
-    assert_eq!(Operation::from_str("invalid"), None);
+    use std::str::FromStr;
+    assert_eq!(Operation::from_str("embed"), Ok(Operation::Embed));
+    assert!(Operation::from_str("invalid").is_err());
+    // str::parse resolves to the same FromStr impl.
+    assert_eq!("train".parse::<Operation>(), Ok(Operation::Train));
 }
 
 #[test]

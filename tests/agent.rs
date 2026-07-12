@@ -294,8 +294,8 @@ fn test_space_process_all() {
     space.register(Agent::new("a1"));
     space.register(Agent::new("a2"));
 
-    space.send("a1", "a2", Message::remember("msg1"));
-    space.send("a2", "a1", Message::remember("msg2"));
+    space.send("a1", "a2", Message::remember("msg1")).unwrap();
+    space.send("a2", "a1", Message::remember("msg2")).unwrap();
 
     let processed = space.process_all();
     assert_eq!(processed.len(), 2);
@@ -308,7 +308,7 @@ fn test_space_event_emission() {
     assert!(space.event_count() > 0); // connect event
 
     space.register(Agent::new("a2"));
-    space.send("a1", "a2", Message::new("hello"));
+    space.send("a1", "a2", Message::new("hello")).unwrap();
     assert!(space.event_count() >= 3); // 2 connects + 1 message routed
 }
 

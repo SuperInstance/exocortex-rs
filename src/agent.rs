@@ -1,9 +1,9 @@
 //! Agent lifecycle — autonomous entities with capabilities, state, and message queue.
 
 use crate::conservation::ConservationState;
+use crate::memory::MemoryStore;
 use crate::message::{Message, MessageQueue};
 use crate::types::*;
-use crate::memory::MemoryStore;
 
 /// Agent state — what an agent currently knows and feels.
 #[derive(Debug, Clone, Default)]
@@ -266,11 +266,25 @@ impl std::fmt::Display for DecisionDenialReason {
             Self::MissingCapability(op) => {
                 write!(f, "agent lacks capability: {}", op.as_str())
             }
-            Self::EnergyExhausted => write!(f, "energy conservation law violated: budget exhausted"),
-            Self::NoveltyExhausted => write!(f, "entropy conservation law violated: novelty budget exhausted"),
-            Self::InformationLossExceeded => write!(f, "information conservation law violated: too many memories pruned"),
-            Self::IdentityDriftExceeded => write!(f, "symmetry conservation law violated: identity drift exceeds threshold"),
-            Self::MomentumViolation => write!(f, "momentum conservation law violated: priority shift too large"),
+            Self::EnergyExhausted => {
+                write!(f, "energy conservation law violated: budget exhausted")
+            }
+            Self::NoveltyExhausted => write!(
+                f,
+                "entropy conservation law violated: novelty budget exhausted"
+            ),
+            Self::InformationLossExceeded => write!(
+                f,
+                "information conservation law violated: too many memories pruned"
+            ),
+            Self::IdentityDriftExceeded => write!(
+                f,
+                "symmetry conservation law violated: identity drift exceeds threshold"
+            ),
+            Self::MomentumViolation => write!(
+                f,
+                "momentum conservation law violated: priority shift too large"
+            ),
         }
     }
 }

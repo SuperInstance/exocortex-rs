@@ -4,7 +4,7 @@
 //! the resonance engine detects this and emits a "resonance" event.
 //! This enables serendipitous cross-agent knowledge sharing.
 
-use crate::types::{cosine_similarity, current_time, CortexEvent};
+use crate::types::{cosine_similarity, current_time};
 use std::collections::HashMap;
 
 /// Resonance threshold (default 0.8 cosine similarity).

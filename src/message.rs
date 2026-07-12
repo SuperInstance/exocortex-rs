@@ -4,9 +4,10 @@ use crate::types::current_time;
 use crate::types::Operation;
 
 /// Message types for inter-agent communication.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum MessageType {
     /// Direct point-to-point message.
+    #[default]
     Direct,
     /// Broadcast to all agents.
     Broadcast,
@@ -30,12 +31,6 @@ impl MessageType {
             MessageType::Event => "event",
             MessageType::Conservation => "conservation",
         }
-    }
-}
-
-impl Default for MessageType {
-    fn default() -> Self {
-        MessageType::Direct
     }
 }
 

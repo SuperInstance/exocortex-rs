@@ -175,7 +175,14 @@ impl Ord for EventWrapper {
         // priority_key returns (negated_importance, timestamp).
         // Lower negated_importance = higher actual importance.
         // We reverse to get higher importance first.
-        other.0.priority_key().cmp(&self.0.priority_key())
+        let self_key = self.0.priority_key();
+        let other_key = other.0.priority_key();
+        // Compare importance (i64, Ord) descending, then timestamp (f64) ascending
+        // via total_cmp to satisfy the Ord requirement (f64 is only PartialOrd).
+        other_key
+            .0
+            .cmp(&self_key.0)
+            .then_with(|| self_key.1.total_cmp(&other_key.1))
     }
 }
 
@@ -186,11 +193,13 @@ mod tests {
     #[test]
     fn test_publish_and_dispatch() {
         let mut bus = CorticalBus::new();
-        let mut received = Vec::new();
 
         let callback: Subscriber = |event: &CortexEvent| {
-            // Can't capture external state easily without Box<dyn Fn>.
-            // In real usage, subscribers would write to channels or shared state.
+            // Subscriber is a plain function pointer (no captured state).
+            // Dispatch correctness is verified by checking pending/dispatched
+            // counters; fan-out into observable state requires an external
+            // channel or shared cell, see test_dispatch_calls_subscribers.
+            let _ = event.event_type.len();
         };
 
         bus.subscribe(callback);

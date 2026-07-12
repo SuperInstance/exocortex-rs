@@ -49,8 +49,8 @@ impl AgentSpace {
     pub fn deregister(&mut self, agent_id: &str) -> bool {
         if let Some(idx) = self.find_index(agent_id) {
             self.agents.swap_remove(idx);
-            let event = CortexEvent::new("agent_disconnect", "system")
-                .with_payload("agent_id", agent_id);
+            let event =
+                CortexEvent::new("agent_disconnect", "system").with_payload("agent_id", agent_id);
             self.events.push(event);
             true
         } else {
@@ -97,15 +97,17 @@ impl AgentSpace {
             return Err(SpaceError::AgentNotFound(from.to_string()));
         }
         // Validate receiver exists
-        let to_idx = self.find_index(to).ok_or(SpaceError::AgentNotFound(to.to_string()))?;
+        let to_idx = self
+            .find_index(to)
+            .ok_or(SpaceError::AgentNotFound(to.to_string()))?;
 
         // Stamp the message
         message.from = from.to_string();
         message.to = to.to_string();
+        let msg_type = message.message_type.clone();
 
         // Deliver
         if let Some(ref mut a) = self.agents.get_mut(to_idx) {
-            let msg_type = message.message_type.clone();
             a.receive(message);
             a.state.messages_received += 1;
         }

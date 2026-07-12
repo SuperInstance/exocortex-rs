@@ -46,7 +46,13 @@ impl MemoryStore {
     /// Store a new memory. Goes into hot + warm tiers.
     ///
     /// Returns the memory ID.
-    pub fn remember(&mut self, content: &str, embedding: Vec<f64>, agent_id: &str, tags: &[&str]) -> String {
+    pub fn remember(
+        &mut self,
+        content: &str,
+        embedding: Vec<f64>,
+        agent_id: &str,
+        tags: &[&str],
+    ) -> String {
         let entry = MemoryEntry::new_tagged(content, embedding.clone(), agent_id, tags);
 
         let id = entry.id.clone();
@@ -101,11 +107,18 @@ impl MemoryStore {
     }
 
     /// Recall and reinforce memories (mutable version).
-    pub fn recall_and_reinforce(&mut self, query_embedding: &[f64], top_k: usize) -> Vec<(String, String, f64)> {
+    pub fn recall_and_reinforce(
+        &mut self,
+        query_embedding: &[f64],
+        top_k: usize,
+    ) -> Vec<(String, String, f64)> {
         // First, collect IDs and similarities
         let matches: Vec<(String, f64)> = {
             let results = self.recall(query_embedding, top_k);
-            results.into_iter().map(|(e, sim)| (e.id.clone(), sim)).collect()
+            results
+                .into_iter()
+                .map(|(e, sim)| (e.id.clone(), sim))
+                .collect()
         };
 
         // Then reinforce
@@ -315,7 +328,13 @@ impl MemoryLayer {
         }
     }
 
-    pub fn remember(&mut self, content: &str, embedding: Vec<f64>, agent_id: &str, tags: &[&str]) -> String {
+    pub fn remember(
+        &mut self,
+        content: &str,
+        embedding: Vec<f64>,
+        agent_id: &str,
+        tags: &[&str],
+    ) -> String {
         self.store.remember(content, embedding, agent_id, tags)
     }
 
