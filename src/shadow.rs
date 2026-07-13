@@ -120,8 +120,8 @@ pub fn render_shadow(event: &CortexEvent) -> RenderedShadow {
     let color = classify_color(event);
 
     RenderedShadow {
-        glyph,
-        story: glyph.clone(),
+        glyph: glyph.clone(),
+        story: glyph,
         color,
         layer: ShadowLayer::Glyph,
         timestamp: event.timestamp,
