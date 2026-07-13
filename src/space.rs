@@ -103,9 +103,11 @@ impl AgentSpace {
         message.from = from.to_string();
         message.to = to.to_string();
 
+        // Stamp message type before delivery
+        let msg_type = message.message_type.clone();
+
         // Deliver
         if let Some(ref mut a) = self.agents.get_mut(to_idx) {
-            let msg_type = message.message_type.clone();
             a.receive(message);
             a.state.messages_received += 1;
         }
