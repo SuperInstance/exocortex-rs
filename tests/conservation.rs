@@ -87,8 +87,8 @@ fn test_novelty_spend() {
 #[test]
 fn test_novelty_exhaustion() {
     let mut state = ConservationState::new();
-    state.spend_novelty(0.9);
-    assert!(!state.check_novelty(0.2));
+    assert!(state.spend_novelty(0.9));
+    assert!(!state.spend_novelty(0.2));
     assert_eq!(state.violations, 1);
 }
 
