@@ -9,9 +9,15 @@
 
 use crate::types::CortexEvent;
 use std::collections::BinaryHeap;
+use std::sync::Arc;
 
 /// Type alias for subscriber callbacks.
-type Subscriber = fn(&CortexEvent);
+///
+/// Subscribers are boxed `Fn` closures (held behind an `Arc` so they can be
+/// cheaply shared and invoked from any context). This lets subscribers
+/// capture external state — channels, atomics, shared cells — which a bare
+/// `fn` pointer cannot do.
+pub type Subscriber = Arc<dyn Fn(&CortexEvent) + Send + Sync>;
 
 /// Priority-based pub/sub event bus with backpressure.
 ///
@@ -53,8 +59,15 @@ impl CorticalBus {
     }
 
     /// Register a subscriber callback.
-    pub fn subscribe(&mut self, callback: Subscriber) {
-        self.subscribers.push(callback);
+    ///
+    /// Accepts any `Fn` closure (with optional captured state) that is
+    /// `Send + Sync + 'static`. Plain `fn` pointers still work — they
+    /// satisfy the bound trivially.
+    pub fn subscribe<F>(&mut self, callback: F)
+    where
+        F: Fn(&CortexEvent) + Send + Sync + 'static,
+    {
+        self.subscribers.push(Arc::new(callback));
     }
 
     /// Publish an event. Returns false if queue is full (backpressure).
@@ -74,6 +87,15 @@ impl CorticalBus {
         self.publish(event)
     }
 
+    /// Pop the single highest-priority event without dispatching it.
+    ///
+    /// Useful for callers that want to drain the bus in priority order under
+    /// their own control, and for tests that need to assert on ordering
+    /// without poking at private heap state.
+    pub fn pop_next(&mut self) -> Option<CortexEvent> {
+        self.queue.pop().map(|EventWrapper(event)| event)
+    }
+
     /// Rate limit: check if this trace_id has exceeded the per-trace limit.
     pub fn should_render(&mut self, event: &CortexEvent) -> bool {
         let count = self.trace_counts.entry(event.trace_id.clone()).or_insert(0);
@@ -87,7 +109,7 @@ impl CorticalBus {
     pub fn dispatch_all(&mut self) -> usize {
         let mut dispatched = 0;
         while let Some(EventWrapper(event)) = self.queue.pop() {
-            for &sub in &self.subscribers {
+            for sub in &self.subscribers {
                 sub(&event);
             }
             dispatched += 1;
@@ -102,7 +124,7 @@ impl CorticalBus {
         while dispatched < max {
             match self.queue.pop() {
                 Some(EventWrapper(event)) => {
-                    for &sub in &self.subscribers {
+                    for sub in &self.subscribers {
                         sub(&event);
                     }
                     dispatched += 1;
@@ -173,30 +195,38 @@ impl Ord for EventWrapper {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // BinaryHeap is a max-heap, so we want higher priority first.
         // priority_key returns (negated_importance, timestamp).
-        // Lower negated_importance = higher actual importance.
-        // We reverse to get higher importance first.
-        // Compare by importance first (i64, which is Ord), then by timestamp (f64, PartialOrd).
-        let (self_imp, self_ts) = self.0.priority_key();
-        let (other_imp, other_ts) = other.0.priority_key();
-        other_imp
-            .cmp(&self_imp)
-            .then_with(|| other_ts.partial_cmp(&self_ts).unwrap_or(std::cmp::Ordering::Equal))
+        // We compare BOTH components reversed so that:
+        //   - higher importance (more negative i64) pops first, and
+        //   - on equal importance, the earlier timestamp pops first (FIFO).
+        // f64 only implements PartialOrd, so the timestamp leg uses
+        // total_cmp to give a total ordering (required by Ord).
+        let self_key = self.0.priority_key();
+        let other_key = other.0.priority_key();
+        other_key
+            .0
+            .cmp(&self_key.0)
+            .then_with(|| other_key.1.total_cmp(&self_key.1))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     #[test]
     fn test_publish_and_dispatch() {
         let mut bus = CorticalBus::new();
-        let callback: Subscriber = |event: &CortexEvent| {
-            // Can't capture external state easily without Box<dyn Fn>.
-            // In real usage, subscribers would write to channels or shared state.
-        };
 
-        bus.subscribe(callback);
+        // Subscriber captures shared state — only possible now that the bus
+        // accepts boxed closures instead of bare fn pointers.
+        let received = Arc::new(AtomicUsize::new(0));
+        let received_cb = Arc::clone(&received);
+        bus.subscribe(move |_event: &CortexEvent| {
+            received_cb.fetch_add(1, Ordering::SeqCst);
+        });
+
         bus.publish(CortexEvent::new("test", "unit"));
         bus.publish(CortexEvent::new("test2", "unit"));
 
@@ -205,6 +235,70 @@ mod tests {
         let dispatched = bus.dispatch_all();
         assert_eq!(dispatched, 2);
         assert_eq!(bus.pending(), 0);
+        // Both events were fanned out to the subscriber.
+        assert_eq!(received.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn test_dispatch_fans_out_to_all_subscribers() {
+        let mut bus = CorticalBus::new();
+        let seen_a = Arc::new(AtomicUsize::new(0));
+        let seen_b = Arc::new(AtomicUsize::new(0));
+        let seen_a_cb = Arc::clone(&seen_a);
+        let seen_b_cb = Arc::clone(&seen_b);
+        bus.subscribe(move |_e: &CortexEvent| {
+            seen_a_cb.fetch_add(1, Ordering::SeqCst);
+        });
+        bus.subscribe(move |_e: &CortexEvent| {
+            seen_b_cb.fetch_add(1, Ordering::SeqCst);
+        });
+
+        bus.publish(CortexEvent::new("x", "u"));
+        bus.publish(CortexEvent::new("y", "u"));
+        bus.publish(CortexEvent::new("z", "u"));
+
+        assert_eq!(bus.dispatch_all(), 3);
+        assert_eq!(seen_a.load(Ordering::SeqCst), 3);
+        assert_eq!(seen_b.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn test_subscriber_receives_event_payload() {
+        let mut bus = CorticalBus::new();
+        let captured = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let captured_cb = Arc::clone(&captured);
+        bus.subscribe(move |event: &CortexEvent| {
+            captured_cb.lock().unwrap().push(event.event_type.clone());
+        });
+        // Distinct importances so dispatch order is deterministic regardless
+        // of timestamp collisions between tightly-spaced publish() calls.
+        bus.publish(CortexEvent::new("alpha", "u").with_importance(0.9));
+        bus.publish(CortexEvent::new("beta", "u").with_importance(0.1));
+        bus.dispatch_all();
+
+        let got = captured.lock().unwrap();
+        assert_eq!(*got, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn test_equal_importance_drains_in_fifo_order() {
+        // Regression: the priority_key timestamp tiebreaker must preserve
+        // publish order for equal-importance events. An earlier version of
+        // the Ord impl reversed only the importance leg and got FIFO wrong.
+        let mut bus = CorticalBus::new();
+        for i in 0..5u32 {
+            let mut e = CortexEvent::new(&format!("e{i}"), "u").with_importance(0.5);
+            // Pin timestamps to a strictly increasing sequence so the test
+            // is independent of clock resolution.
+            e.timestamp = 1_000_000.0 + i as f64;
+            bus.publish(e);
+        }
+
+        let mut order = Vec::new();
+        while let Some(e) = bus.pop_next() {
+            order.push(e.event_type);
+        }
+        assert_eq!(order, vec!["e0", "e1", "e2", "e3", "e4"]);
     }
 
     #[test]
@@ -231,12 +325,85 @@ mod tests {
         bus.publish(CortexEvent::new("high", "unit").with_importance(0.9));
         bus.publish(CortexEvent::new("mid", "unit").with_importance(0.5));
 
-        // Dispatch should process high importance first
+        // Drain via the public pop_next API — high importance comes first.
         let mut dispatched_order = Vec::new();
-        while let Some(EventWrapper(event)) = bus.queue.pop() {
-            dispatched_order.push(event.event_type.clone());
+        while let Some(event) = bus.pop_next() {
+            dispatched_order.push(event.event_type);
         }
 
         assert_eq!(dispatched_order, vec!["high", "mid", "low"]);
+    }
+
+    #[test]
+    fn fn_pointer_still_accepted_as_subscriber() {
+        // Plain fn pointers must continue to work for backwards compat.
+        fn count_event(event: &CortexEvent) {
+            let _ = event.event_type.len();
+        }
+        let mut bus = CorticalBus::new();
+        bus.subscribe(count_event);
+        bus.publish(CortexEvent::new("ok", "u"));
+        assert_eq!(bus.dispatch_all(), 1);
+    }
+
+    #[test]
+    fn test_should_render_rate_limits_per_trace() {
+        // should_render caps rendering at max_per_trace (default 5) events per
+        // trace_id. Different trace_ids are tracked independently.
+        let mut bus = CorticalBus::new();
+        let trace_a = "trace-a-aaaa".to_string();
+        let trace_b = "trace-b-bbbb".to_string();
+
+        // First 5 of trace A should render; the 6th must be suppressed.
+        for _ in 0..5 {
+            let mut e = CortexEvent::new("predict", "u");
+            e.trace_id = trace_a.clone();
+            assert!(bus.should_render(&e), "expected render within cap");
+        }
+        let mut sixth = CortexEvent::new("predict", "u");
+        sixth.trace_id = trace_a.clone();
+        assert!(!bus.should_render(&sixth), "expected cap to be enforced");
+
+        // Trace B has its own budget.
+        let mut e_b = CortexEvent::new("predict", "u");
+        e_b.trace_id = trace_b;
+        assert!(bus.should_render(&e_b));
+    }
+
+    #[test]
+    fn test_dispatch_some_bounds_dispatch_count() {
+        let mut bus = CorticalBus::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_cb = Arc::clone(&counter);
+        bus.subscribe(move |_e: &CortexEvent| {
+            counter_cb.fetch_add(1, Ordering::SeqCst);
+        });
+        for i in 0..10u32 {
+            bus.publish(CortexEvent::new(&format!("e{i}"), "u"));
+        }
+
+        // dispatch_some must stop at the bound even when more are pending.
+        assert_eq!(bus.dispatch_some(3), 3);
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+        assert_eq!(bus.pending(), 7);
+
+        // dispatch_some with a bound larger than pending drains everything.
+        assert_eq!(bus.dispatch_some(usize::MAX), 7);
+        assert_eq!(bus.pending(), 0);
+    }
+
+    #[test]
+    fn test_emit_shorthand_publishes() {
+        let mut bus = CorticalBus::new();
+        assert!(bus.emit("predict", "agent-1"));
+        assert_eq!(bus.pending(), 1);
+        assert_eq!(bus.pop_next().unwrap().event_type, "predict");
+    }
+
+    #[test]
+    fn test_pop_next_on_empty_returns_none() {
+        let mut bus = CorticalBus::new();
+        assert!(bus.pop_next().is_none());
+        assert!(bus.is_empty());
     }
 }

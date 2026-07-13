@@ -46,7 +46,13 @@ impl MemoryStore {
     /// Store a new memory. Goes into hot + warm tiers.
     ///
     /// Returns the memory ID.
-    pub fn remember(&mut self, content: &str, embedding: Vec<f64>, agent_id: &str, tags: &[&str]) -> String {
+    pub fn remember(
+        &mut self,
+        content: &str,
+        embedding: Vec<f64>,
+        agent_id: &str,
+        tags: &[&str],
+    ) -> String {
         let entry = MemoryEntry::new_tagged(content, embedding.clone(), agent_id, tags);
 
         let id = entry.id.clone();
@@ -101,11 +107,18 @@ impl MemoryStore {
     }
 
     /// Recall and reinforce memories (mutable version).
-    pub fn recall_and_reinforce(&mut self, query_embedding: &[f64], top_k: usize) -> Vec<(String, String, f64)> {
+    pub fn recall_and_reinforce(
+        &mut self,
+        query_embedding: &[f64],
+        top_k: usize,
+    ) -> Vec<(String, String, f64)> {
         // First, collect IDs and similarities
         let matches: Vec<(String, f64)> = {
             let results = self.recall(query_embedding, top_k);
-            results.into_iter().map(|(e, sim)| (e.id.clone(), sim)).collect()
+            results
+                .into_iter()
+                .map(|(e, sim)| (e.id.clone(), sim))
+                .collect()
         };
 
         // Then reinforce
@@ -300,10 +313,15 @@ pub struct MemoryTickStats {
     pub pruned: usize,
 }
 
-/// The shared memory layer — a wrapper around MemoryStore for the AgentSpace.
+/// A standalone shared-memory helper — a thin wrapper around [`MemoryStore`].
 ///
-/// This is the equivalent of the Python MemoryLayer class, providing
-/// a shared memory pool that all agents in a space can access.
+/// **Status (honest):** This type is exported so callers can build a
+/// process-wide memory pool, but `AgentSpace` does **not** currently wire
+/// one up. Each [`Agent`](crate::Agent) owns a private `MemoryStore`. Code
+/// that wants a shared layer must construct a `MemoryLayer` and route
+/// remember/recall through it explicitly. The Python counterpart's
+/// `MemoryLayer` is plumbed through the space; that wiring is not yet
+/// ported.
 pub struct MemoryLayer {
     store: MemoryStore,
 }
@@ -315,7 +333,13 @@ impl MemoryLayer {
         }
     }
 
-    pub fn remember(&mut self, content: &str, embedding: Vec<f64>, agent_id: &str, tags: &[&str]) -> String {
+    pub fn remember(
+        &mut self,
+        content: &str,
+        embedding: Vec<f64>,
+        agent_id: &str,
+        tags: &[&str],
+    ) -> String {
         self.store.remember(content, embedding, agent_id, tags)
     }
 
@@ -403,5 +427,88 @@ mod tests {
 
         let stats = store.stats();
         assert!(stats.total >= 3);
+    }
+
+    #[test]
+    fn test_recall_and_reinforce_reheats_to_hot() {
+        // recall_and_reinforce must (1) return matching memories with their
+        // similarity, (2) bump last_reinforced, and (3) reheat warm/cold
+        // entries back into the hot tier.
+        let mut store = MemoryStore::new();
+        let emb = vec![0.4; 32];
+        let id = store.remember("fact", emb.clone(), "agent", &[]);
+
+        // Force-cool the memory into the warm tier by aging it past the
+        // hot window, then running a tick.
+        if let Some(entry) = store.warm.get_mut(&id) {
+            entry.last_reinforced = current_time() - (HOT_WINDOW_SECONDS + 10.0);
+        }
+        // Also need the hot-tier copy to be aged so tick() moves it out.
+        if let Some(entry) = store.hot.get_mut(&id) {
+            entry.last_reinforced = current_time() - (HOT_WINDOW_SECONDS + 10.0);
+        }
+        let tick_stats = store.tick();
+        assert!(
+            tick_stats.cooled_to_warm >= 1,
+            "expected hot→warm transition, got {tick_stats:?}"
+        );
+        // After cooling, the memory is in warm only.
+        assert!(!store.hot.contains_key(&id));
+        assert!(store.warm.contains_key(&id));
+
+        // recall_and_reinforce should bring it back to hot.
+        let results = store.recall_and_reinforce(&emb, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, id);
+        assert_eq!(results[0].1, "fact");
+        assert!(
+            store.hot.contains_key(&id),
+            "memory should be reheated to hot"
+        );
+    }
+
+    #[test]
+    fn test_tick_prunes_decayed_cold_memories() {
+        // Cold-tier memories whose effective confidence falls below 0.05
+        // must be pruned on tick, and their embedding-cache entries removed.
+        let mut store = MemoryStore::new();
+        let id = store.remember("ephemeral", vec![0.5; 16], "a", &[]);
+
+        // Move the memory straight into the cold tier with confidence low
+        // enough that effective_confidence < 0.05 (the prune threshold).
+        let ancient = current_time() - 86400.0 * 365.0; // ~1 year
+        let mut entry = store.warm.remove(&id).unwrap();
+        entry.last_reinforced = ancient;
+        entry.confidence = 0.01;
+        store.cold.insert(id.clone(), entry);
+        // Clear the hot copy too so the tick has nothing else to do.
+        store.hot.remove(&id);
+        store.hot_order.retain(|x| x != &id);
+
+        let before = store.total();
+        assert!(store.cold.contains_key(&id));
+
+        let prune_stats = store.tick();
+        assert!(
+            prune_stats.pruned >= 1,
+            "expected at least one prune, got {prune_stats:?}"
+        );
+        assert_eq!(store.total(), before - prune_stats.pruned);
+        assert!(store.get(&id).is_none(), "decayed memory should be gone");
+        assert!(
+            !store.embed_cache.contains_key(&id),
+            "embedding cache entry should be removed on prune"
+        );
+    }
+
+    #[test]
+    fn test_get_mut_updates_are_visible_via_get() {
+        let mut store = MemoryStore::new();
+        let id = store.remember("orig", vec![0.1; 8], "a", &[]);
+
+        if let Some(entry) = store.get_mut(&id) {
+            entry.content = "edited".to_string();
+        }
+        assert_eq!(store.get(&id).unwrap().content, "edited");
     }
 }

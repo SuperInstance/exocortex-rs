@@ -125,17 +125,36 @@ let stats = store.tick();
 
 ## Conservation Laws
 
-Every agent decision is governed by five conservation laws, analogous to thermodynamic principles:
+This component exists in two languages:
 
-| Law | Symbol | What It Enforces |
-|-----|--------|-----------------|
-| **Energy** | ΔE | Total decision energy is finite per cycle — prevents runaway computation |
-| **Momentum** | Δp | Agents resist sudden priority flips — prevents thrashing |
-| **Entropy** | ΔS | Novelty seeking is bounded — prevents random behavior |
-| **Information** | ΔI | Memories cannot be silently lost — audit trail for state changes |
-| **Symmetry** | Ψ | Agent identity is preserved through transforms — prevents identity collapse |
+- **Python** (`pip install si-exocortex`) — [SuperInstance/exocortex](https://github.com/SuperInstance/exocortex)
+- **Rust** (`cargo add exocortex`) — [SuperInstance/exocortex-rs](https://github.com/SuperInstance/exocortex-rs)
 
-These aren't metaphors. Each law maps to a concrete numeric check in the `conservation` module that gates every `agent.decide()` call. A decision that violates a conservation law returns `DecisionResult::Denied(reason)`.
+> **Parity status (honest):** This Rust crate implements the **core
+> in-memory substrate**: agents, conservation laws, tiered memory,
+> pub/sub bus, resonance, and shadow rendering. It does **not** yet
+> match the Python implementation's breadth — there is no persistence
+> backend (SurrealDB/SQLite/S3 are bring-your-own stubs here, not
+> wired-in integrations), no async runtime, no transport layer, and
+> `MemoryLayer` is exported but not yet plumbed through `AgentSpace`.
+> The shared data structures and conservation semantics are intended
+> to match the Python spec; do not assume behavioral parity for
+> non-core features without checking the source.
+
+## Status & Scope
+
+| Area | Status |
+|------|--------|
+| Agent / AgentSpace / decisions | ✅ Implemented, in-memory |
+| Conservation laws (5) | ✅ Implemented |
+| Tiered memory (hot/warm/cold) | ✅ Implemented, in-memory only |
+| Cortical Bus (priority pub/sub) | ✅ Implemented, sync only |
+| Resonance engine | ✅ Implemented |
+| Shadow rendering | ✅ Implemented |
+| `MemoryLayer` (shared pool) | ⚠️  Exported but not wired into `AgentSpace` |
+| Persistence (SurrealDB/SQLite/S3) | ❌ Not implemented — bring your own |
+| Async transport (gRPC/REST/WebSocket) | ❌ Not implemented — bring your own |
+| `no_std` | ❌ Removed — crate requires `std` (see commit history) |
 
 ## API Reference
 
@@ -200,7 +219,6 @@ engine.add_knowledge("agent-2", &["rust", "safety", "concurrency"]);
 // Find overlapping knowledge between agents
 let resonances = engine.detect_resonance(0.3); // 30% overlap threshold
 ```
-
 ## Architecture
 
 ```

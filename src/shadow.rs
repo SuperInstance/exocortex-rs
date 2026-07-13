@@ -73,34 +73,16 @@ pub fn classify_color(event: &CortexEvent) -> ShadowColor {
 pub fn render_shadow(event: &CortexEvent) -> RenderedShadow {
     let glyph = match event.event_type.as_str() {
         "embed" => format!("🧮 embed ({})", event.payload_get("dims").unwrap_or("")),
-        "train" => format!(
-            "🏋️ train {}",
-            event.payload_get("model").unwrap_or("")
-        ),
-        "predict" => format!(
-            "🧠 predict ({:.0}% conf)",
-            event.confidence * 100.0
-        ),
+        "train" => format!("🏋️ train {}", event.payload_get("model").unwrap_or("")),
+        "predict" => format!("🧠 predict ({:.0}% conf)", event.confidence * 100.0),
         "remember" => format!(
             "💾 remembered: {}",
             event.payload_get("preview").unwrap_or("")
         ),
-        "recall" => format!(
-            "🔍 recall: {}",
-            event.payload_get("preview").unwrap_or("")
-        ),
-        "analyze" => format!(
-            "📊 {}",
-            event.payload_get("finding").unwrap_or("analysis")
-        ),
-        "query" => format!(
-            "🔍 query: {}",
-            event.payload_get("query").unwrap_or("")
-        ),
-        "anomaly" => format!(
-            "⚠️ anomaly: {}",
-            event.payload_get("detail").unwrap_or("")
-        ),
+        "recall" => format!("🔍 recall: {}", event.payload_get("preview").unwrap_or("")),
+        "analyze" => format!("📊 {}", event.payload_get("finding").unwrap_or("analysis")),
+        "query" => format!("🔍 query: {}", event.payload_get("query").unwrap_or("")),
+        "anomaly" => format!("⚠️ anomaly: {}", event.payload_get("detail").unwrap_or("")),
         "dream" => format!(
             "💭 dreaming: {}",
             event.payload_get("activity").unwrap_or("")
@@ -119,9 +101,11 @@ pub fn render_shadow(event: &CortexEvent) -> RenderedShadow {
 
     let color = classify_color(event);
 
+    let story = glyph.clone();
+
     RenderedShadow {
-        glyph: glyph.clone(),
-        story: glyph,
+        glyph,
+        story,
         color,
         layer: ShadowLayer::Glyph,
         timestamp: event.timestamp,
@@ -160,8 +144,7 @@ mod tests {
 
     #[test]
     fn test_render_embed() {
-        let event = CortexEvent::new("embed", "test")
-            .with_payload("dims", "384");
+        let event = CortexEvent::new("embed", "test").with_payload("dims", "384");
         let shadow = render_shadow(&event);
         assert!(shadow.glyph.contains("🧮"));
         assert_eq!(shadow.color, ShadowColor::Blue);
@@ -169,8 +152,7 @@ mod tests {
 
     #[test]
     fn test_render_anomaly() {
-        let event = CortexEvent::new("anomaly", "reflex")
-            .with_payload("detail", "temp spike");
+        let event = CortexEvent::new("anomaly", "reflex").with_payload("detail", "temp spike");
         let shadow = render_shadow(&event);
         assert!(shadow.glyph.contains("⚠️"));
         assert_eq!(shadow.color, ShadowColor::Red);

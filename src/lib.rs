@@ -25,29 +25,34 @@
 //!     .capability(Operation::Recall)
 //!     .build();
 //! space.register(agent);
+//! space.register(Agent::new("agent-2"));
 //!
-//! space.send("agent-1", "agent-2", Message::remember("hello world"));
+//! // Deliver a message (send validates both endpoints exist).
+//! let result = space.send("agent-1", "agent-2", Message::remember("hello world"));
+//! assert!(result.is_ok());
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
+//! *🦀 Part of the **SuperInstance Fleet** — zero-dependency, std-only for now.
+//! A future `no_std` port would require replacing `std::collections::*` and
+//! `SystemTime` with `alloc` + an injectable clock.*
 
 pub mod agent;
-pub mod space;
-pub mod message;
-pub mod memory;
 pub mod bus;
-pub mod resonance;
 pub mod conservation;
-pub mod types;
+pub mod memory;
+pub mod message;
+pub mod resonance;
 pub mod shadow;
+pub mod space;
+pub mod types;
 
-pub use agent::{Agent, DecisionResult, DecisionDenialReason};
-pub use space::AgentSpace;
-pub use message::{Message, MessageType};
-pub use memory::MemoryLayer;
+pub use agent::{Agent, AgentBuilder, AgentState, Decision, DecisionDenialReason, DecisionResult};
 pub use bus::CorticalBus;
-pub use resonance::ResonanceEngine;
 pub use conservation::{ConservationLaw, ConservationState, DECISION_ENERGY_BUDGET};
+pub use memory::MemoryLayer;
+pub use message::{Message, MessageType};
+pub use resonance::ResonanceEngine;
+pub use space::AgentSpace;
 pub use types::*;
 
 /// Current version of the exocortex crate.

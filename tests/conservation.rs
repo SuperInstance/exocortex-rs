@@ -22,7 +22,11 @@ fn test_law_descriptions() {
 
     for law in &ConservationLaw::ALL {
         assert!(!law.name().is_empty(), "Law has empty name");
-        assert!(!law.description().is_empty(), "Law {:?} has empty description", law);
+        assert!(
+            !law.description().is_empty(),
+            "Law {:?} has empty description",
+            law
+        );
     }
 }
 
@@ -88,6 +92,7 @@ fn test_novelty_spend() {
 fn test_novelty_exhaustion() {
     let mut state = ConservationState::new();
     assert!(state.spend_novelty(0.9));
+    // Spending beyond the remaining budget must fail and record a violation.
     assert!(!state.spend_novelty(0.2));
     assert_eq!(state.violations, 1);
 }

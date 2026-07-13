@@ -1,7 +1,5 @@
 //! Core types — the canonical vocabulary every cortex speaks.
 
-use crate::conservation::ConservationState;
-
 /// The 8 canonical operations every cortex speaks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -43,21 +41,6 @@ impl Operation {
         }
     }
 
-    /// Parse from string.
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "embed" => Some(Operation::Embed),
-            "query" => Some(Operation::Query),
-            "train" => Some(Operation::Train),
-            "predict" => Some(Operation::Predict),
-            "analyze" => Some(Operation::Analyze),
-            "remember" => Some(Operation::Remember),
-            "recall" => Some(Operation::Recall),
-            "transform" => Some(Operation::Transform),
-            _ => None,
-        }
-    }
-
     /// Determine the compute tier for this operation.
     pub fn compute_tier(&self) -> ComputeTier {
         match self {
@@ -66,6 +49,36 @@ impl Operation {
             }
             Operation::Predict | Operation::Analyze | Operation::Transform => ComputeTier::Warm,
             Operation::Train => ComputeTier::Batch,
+        }
+    }
+}
+
+/// Parse an [`Operation`] from a string (case-sensitive).
+///
+/// Implemented as the standard `FromStr` trait so that `str::parse` works:
+///
+/// ```
+/// use exocortex::Operation;
+/// use std::str::FromStr;
+///
+/// assert_eq!(Operation::from_str("embed"), Ok(Operation::Embed));
+/// assert_eq!("train".parse::<Operation>(), Ok(Operation::Train));
+/// assert!("nope".parse::<Operation>().is_err());
+/// ```
+impl std::str::FromStr for Operation {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "embed" => Ok(Operation::Embed),
+            "query" => Ok(Operation::Query),
+            "train" => Ok(Operation::Train),
+            "predict" => Ok(Operation::Predict),
+            "analyze" => Ok(Operation::Analyze),
+            "remember" => Ok(Operation::Remember),
+            "recall" => Ok(Operation::Recall),
+            "transform" => Ok(Operation::Transform),
+            _ => Err(()),
         }
     }
 }
@@ -299,7 +312,8 @@ impl MemoryEntry {
     /// Confidence after half-life decay.
     pub fn effective_confidence(&self) -> f64 {
         let age_days = (current_time() - self.last_reinforced) / 86400.0;
-        let decay = (-0.693_147_180_559_945_3 * age_days / self.half_life_days).exp();
+        // decay = 0.5 ^ (age / half_life) = exp(-ln(2) * age / half_life)
+        let decay = (-std::f64::consts::LN_2 * age_days / self.half_life_days).exp();
         self.confidence * decay
     }
 
@@ -369,7 +383,9 @@ pub fn generate_id() -> String {
         }
         let mut result = String::with_capacity(16);
         for _ in 0..16 {
-            STATE = STATE.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            STATE = STATE
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let nibble = ((STATE >> 56) & 0xF) as u8;
             let c = if nibble < 10 {
                 b'0' + nibble
@@ -384,17 +400,9 @@ pub fn generate_id() -> String {
 
 /// Current unix timestamp as f64.
 pub fn current_time() -> f64 {
-    // For no_std, we'd use a provided clock. For now, use std.
-    #[cfg(feature = "std")]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0)
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        0.0
-    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }

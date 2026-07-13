@@ -254,9 +254,13 @@ fn test_space_send_message() {
 
     let receiver = space.get("receiver").unwrap();
     assert_eq!(receiver.pending_messages(), 1);
+    // Agent::receive() already bumps messages_received; space.send must not
+    // double-count it (regression guard).
+    assert_eq!(receiver.state.messages_received, 1);
 
     let sender = space.get("sender").unwrap();
     assert_eq!(sender.state.messages_sent, 1);
+    assert_eq!(sender.state.messages_received, 0);
 }
 
 #[test]
@@ -294,8 +298,8 @@ fn test_space_process_all() {
     space.register(Agent::new("a1"));
     space.register(Agent::new("a2"));
 
-    space.send("a1", "a2", Message::remember("msg1"));
-    space.send("a2", "a1", Message::remember("msg2"));
+    space.send("a1", "a2", Message::remember("msg1")).unwrap();
+    space.send("a2", "a1", Message::remember("msg2")).unwrap();
 
     let processed = space.process_all();
     assert_eq!(processed.len(), 2);
@@ -308,7 +312,7 @@ fn test_space_event_emission() {
     assert!(space.event_count() > 0); // connect event
 
     space.register(Agent::new("a2"));
-    space.send("a1", "a2", Message::new("hello"));
+    space.send("a1", "a2", Message::new("hello")).unwrap();
     assert!(space.event_count() >= 3); // 2 connects + 1 message routed
 }
 

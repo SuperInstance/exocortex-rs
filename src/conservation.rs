@@ -284,6 +284,7 @@ mod tests {
         let mut state = ConservationState::new();
         assert!(state.check_novelty(0.5));
         assert!(state.spend_novelty(0.8));
+        // Spending more than remains must fail and record a violation.
         assert!(!state.spend_novelty(0.3));
         assert_eq!(state.violations, 1);
     }
