@@ -17,7 +17,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use exocortex::{AgentSpace, Agent, Operation};
+//! use exocortex::{AgentSpace, Agent, Operation, Message};
 //!
 //! let mut space = AgentSpace::new();
 //! let agent = Agent::builder("agent-1")
@@ -41,7 +41,7 @@ pub mod conservation;
 pub mod types;
 pub mod shadow;
 
-pub use agent::Agent;
+pub use agent::{Agent, DecisionResult, DecisionDenialReason};
 pub use space::AgentSpace;
 pub use message::{Message, MessageType};
 pub use memory::MemoryLayer;
